@@ -1,0 +1,26 @@
+apply plugin: 'groovy'
+apply plugin: 'maven'
+
+
+repositories {
+	mavenCentral()
+}
+	    
+group='com.radiantblue.versionupdater'   // Group name makes easier to manager the packages.
+version='1.0'
+
+
+dependencies {
+    compile gradleApi()
+    compile localGroovy()
+}
+
+      
+uploadArchives {
+	repositories {
+		mavenDeployer {
+			repository(url: uri('../../gradle-maven-core'))
+		}
+	}
+}
+
