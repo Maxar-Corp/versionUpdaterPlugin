@@ -2,10 +2,17 @@ apply plugin: 'groovy'
 apply plugin: 'maven'
 
 
-repositories {
-	mavenCentral()
+if (System.env.OMAR_COMMON_PROPERTIES)
+{
+    apply from: System.env.OMAR_COMMON_PROPERTIES
 }
-	    
+
+repositories {
+   mavenLocal()
+   maven { url “${ossimMavenProxy}” }
+   mavenCentral()
+}
+
 group='com.radiantblue.versionupdater'   // Group name makes easier to manager the packages.
 version='1.0'
 
