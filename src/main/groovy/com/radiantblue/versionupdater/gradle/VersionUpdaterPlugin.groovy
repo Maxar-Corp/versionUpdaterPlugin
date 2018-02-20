@@ -25,7 +25,7 @@ class VersionUpdaterPlugin implements Plugin<Project> {
 
          // Defines
          String RELEASE_STRING = "RELEASE_UPDATE"
-         String BRANCH_TO_PROCESS = "marktest"
+         String BRANCH_TO_PROCESS = "master"
    
          String lastCommitFromFile = "NA"
          String buildVersion = "NA"
