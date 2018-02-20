@@ -12,8 +12,10 @@ class VersionUpdaterPlugin implements Plugin<Project> {
          def String  projectPath = basePath.substring(rootPath.size() + 1)
          def String  gitUpdatePath = projectPath + "/gradle.properties"
 
+         // If this projectDir (basePath) does not contain the base git repo (rootPath)
+         //   then we can safely set the do commit flag to false because this project is not
+         //   in the base git repo.
          if (!basePath.contains(rootPath)) {
-            println "Expected ejection for ${basePath}"
             project.ext.set("doVersionUpdateCommit", "false")
             return
          }
@@ -77,21 +79,29 @@ class VersionUpdaterPlugin implements Plugin<Project> {
 
             // If the first line (first 2 tokens) were our expected RELEASE_STRING, then there is nothing to do.
             //   Otherwise, it will be the last code commit ID indicating we need to update the version.
-            // println "Comparing: ${tokens[0][1]} and ${RELEASE_STRING}"
             if (tokens[0][1] != RELEASE_STRING) {
                // This was a legitimate code commit, so use the short commit ID here
                lastCodeCommitId = tokens[0][0]
             }
             else {
-               println "     INFO: No code changes committed - Nothing to do for ${projectPath}"
+               println "INFO: No code changes committed - Nothing to do for ${projectPath}"
 
-               // Eject
+               // Set the flag to indicate a commit is not necessary
+               project.ext.set("doVersionUpdateCommit", "false")
+
+               // Eject now...
                return
             }
    
             // We are only going to continue this process if this is the master branch.
             if (branch != BRANCH_TO_PROCESS) {
                println "Not updating versions for branch ${branch}!"
+
+               // Set the flag to indicate a commit is not necessary
+               project.ext.set("doVersionUpdateCommit", "false")
+
+               // Eject now...
+               return
             }
             else {
                // If the lastCommit in the properties file isn't the same as the most current commit id, 
@@ -101,7 +111,7 @@ class VersionUpdaterPlugin implements Plugin<Project> {
                   println "lastCommitFromFile: ${lastCommitFromFile}"
                   println "lastCodeCommitId: ${lastCodeCommitId}"
 
-                  println "     INFO: Last code commit IDs have changed. The version number will be updated."
+                  println "+++++INFO: Last code commit IDs have changed. The version number will be updated."
                   def replacementFile = new File("${project.projectDir}/gradle.properties")
                   def oldCommitLine = "lastCommit=${lastCommitFromFile}"
                   def newCommitLine = "lastCommit=${lastCodeCommitId}"
@@ -164,32 +174,21 @@ class VersionUpdaterPlugin implements Plugin<Project> {
                         isDone = true
                      }
                   }
-
-                  //def gitCmd = "git --git-dir=${project.rootDir}/.git add ${gitUpdatePath}"
-                  //gitCmd.execute().text.trim()
-         
-                  // Reset stderr and stdout
-                  //sout = new StringBuilder()
-                  //serr = new StringBuilder()
-                  //while (lockfile.exists) {
-                     //sleep(100)
-                  //}
-                  //def commitProc = "git --git-dir=$rootPath/.git commit -m $RELEASE_STRING".execute()
-                  //commitProc.consumeProcessOutput(sout, serr)
-                  //commitProc.waitForOrKill(20000)
-
-                  // If it failed (serr's size > 0) then inform the user something went wrong
-                  //if (serr.size() > 0) {
-                     //println "stderr > $serr"
-                  //}
                }
                else {
-                  println "     INFO: Last code commit IDs are equal - nothing to update."
+                  println "INFO: Last code commit IDs are equal - nothing to update."
+
+                  // Set the flag to indicate a commit is not necessary
+                  project.ext.set("doVersionUpdateCommit", "false")
                }
             }
          }
          else {
-            println "     INFO: No gradle.properties to update for ${projectPath}"
+            // This project does not wontain versioning information
+            println "INFO: No gradle.properties to update for ${projectPath}"
+
+            // Set the flag to indicate a commit is not necessary
+            project.ext.set("doVersionUpdateCommit", "false")
          }
       }
    }
