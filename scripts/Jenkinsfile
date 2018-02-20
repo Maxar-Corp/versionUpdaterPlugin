@@ -14,16 +14,10 @@ def notifyObj
 node(""){
     def workspaceDir = pwd()
     def appName = "versionUpdaterPlugin"
-    def omarCommonProjName = "omar-common"
-    env.OMAR_COMMON_PROPERTIES="${workspaceDir}/${omarCommonProjName}/omar-common-properties.gradle"
 
     stage("Checkout"){
         dir(appName) {
             git branch: "${OSSIM_GIT_BRANCH}", url: "${GIT_PUBLIC_SERVER_URL}/${appName}.git"
-        }
-
-        dir(omarCommonProjName) {
-            git branch: "${OSSIM_GIT_BRANCH}", url: "${GIT_PUBLIC_SERVER_URL}/${omarCommonProjName}.git"
         }
     }
 
