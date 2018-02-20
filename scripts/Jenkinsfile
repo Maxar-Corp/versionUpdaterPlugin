@@ -21,14 +21,14 @@ node(""){
         }
     }
 
-    stage("Download Artifacts"){
-       step ([$class: "CopyArtifact",
-             projectName: "ossim-ci-${OSSIM_GIT_BRANCH}",
-             filter: "ossim-ci-${OSSIM_GIT_BRANCH}.tgz",
-             flatten: true])
-       sh "tar xvfz ossim-ci-${OSSIM_GIT_BRANCH}.tgz"
-       notifyObj = load "${env.WORKSPACE}/ossim-ci/jenkins/pipeline/notify.groovy"
-    }
+//    stage("Download Artifacts"){
+//       step ([$class: "CopyArtifact",
+//             projectName: "ossim-ci-${OSSIM_GIT_BRANCH}",
+//             filter: "ossim-ci-${OSSIM_GIT_BRANCH}.tgz",
+//             flatten: true])
+//       sh "tar xvfz ossim-ci-${OSSIM_GIT_BRANCH}.tgz"
+//       notifyObj = load "${env.WORKSPACE}/ossim-ci/jenkins/pipeline/notify.groovy"
+//    }
 
     try {
         stage ("Publish Plugin Artifactory")
