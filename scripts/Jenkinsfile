@@ -40,7 +40,7 @@ node(""){
             {
                 sh """
                 pushd ${workspaceDir}
-                ./gradlew artifactoryPublish
+                ${workspaceDir}/gradlew artifactoryPublish
                 popd
                 """
             }
