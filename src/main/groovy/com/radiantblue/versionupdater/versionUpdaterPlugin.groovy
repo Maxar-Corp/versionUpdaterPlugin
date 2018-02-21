@@ -1,9 +1,9 @@
-package com.radiantblue.versionupdater.gradle;
+package com.radiantblue.versionupdater;
 
 import org.gradle.api.*;
 import org.gradle.api.plugins.WarPlugin
 
-class VersionUpdaterPlugin implements Plugin<Project> {
+class versionUpdaterPlugin implements Plugin<Project> {
    def void apply(Project project) {
       project.task('updateTheVersion') << {
 
