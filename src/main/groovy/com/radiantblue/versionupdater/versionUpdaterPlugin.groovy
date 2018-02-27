@@ -36,13 +36,13 @@ class VersionUpdaterPlugin implements Plugin<Project> {
              // Split the root path first
              String []rootTokens = rootPath.split(splitToken)
              // Expecting 2 pieces of this path
-             if (rootTokens.size() == 2) {
+             if (rootTokens != null && rootTokens.size() == 2) {
                 rootPath = rootTokens[1]
 
                 // Split the project path next
                 String []pathTokens = basePath.split(splitToken)
                 // Again, we are expecting 2 pieces of this path
-                if (pathTokens.size() == 2) {
+                if (pathTokens != null && pathTokens.size() == 2) {
                    basePath = pathTokens[1]
                    projectPath = basePath.substring(rootPath.size() + 1)
                    println "Updated basePath: ${basePath}"
@@ -144,7 +144,7 @@ class VersionUpdaterPlugin implements Plugin<Project> {
             def logLines = log.split('\n')
 
             // Default our LCVs
-            int lastCommitIdx = 0; 
+            int lastCommitIdx = -1; 
             boolean foundLastCommit = false;
 
             // Allocate our container for the tokens of however many log lines we could retrieve
@@ -168,6 +168,11 @@ class VersionUpdaterPlugin implements Plugin<Project> {
                }
             }
 
+            if (lastCommitFromFile == "NA" || lastCommitIdx == -1) {
+               // There was no lastCommit token in the project
+               println "INFO: No last commit token found in '${projectPath}'"
+               return 
+            }
 
             // If the the lastCommitFromFile (read from the gradle.properties file) doesn't match what we just 
             //    parsed out of the git log, then we know we had a code change to this branch since it was last
