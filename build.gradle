@@ -7,7 +7,7 @@ repositories {
 }
 	    
 group='com.radiantblue.versionupdater'   // Group name makes easier to manage the packages.
-version='1.6.6'
+version='1.6.15'
 
 
 dependencies {
