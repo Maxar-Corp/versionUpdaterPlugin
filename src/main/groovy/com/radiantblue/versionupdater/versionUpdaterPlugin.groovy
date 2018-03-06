@@ -7,30 +7,57 @@ class VersionUpdaterPlugin implements Plugin<Project> {
    def void apply(Project project) {
       project.task('updateTheVersion') {
          doLast {
+         boolean useDebug = false
+
+         // Extract the debug variable if it exists
+         if (project.hasProperty("vupDebug")) {
+            useDebug = project.ext.get("vupDebug")
+         }
 
          try {
-            // This SHOULD be the location of where the gradle.properties file 
-            //   is for the app
+            // This should be the location of where the gradle.properties file 
+            //   is for the application, plugin, or both.
             String projectPath
-            // This SHOULD be the location of the .git folder
+
+            // This should be the location of the .git repository folder
             String gitRootPath
 
             boolean checkForGradlePropertiesInBase = false
 
-            // Extract some information from the project argument
-            def String  basePath = project.projectDir
-            def String  rootPath = project.rootDir
+            // Extract some information from the project parameter
+            String basePath = project.projectDir.toString()
+            String rootPath = project.rootDir.toString()
+            String rootProject = project.rootProject.toString()
+
+            // The rootProject is of the form "root project 'omar-zipkin-server'"
+            //   By splitting on the single quote, we can extract the actual
+            //   project name (in rpToken[1]).
+            String []rpTokens = rootProject.split("'")
+          
+            // Perform the most basic directory logic check here using the 
+            //   the token we just parsed out.
+            String projectDirectoryName = project.projectDir.getName()
+            if (rpTokens.size() > 1 && !projectDirectoryName.contains(rpTokens[1])) {
+               println "Intentionally skipping '${project.projectDir}' called from within " +
+                  "'${project.rootProject}'"
+               project.ext.set("doVersionUpdateCommit", "false")
+               return
+            }
 
             // Prepare for jenkins project kluge! The rootPath shouldn't really 
             //   contain full paths to subprojects. It should be the path to the
             //   location of the .git directory. If this jenkins project 
             //   variable comes in this way, we need to hack it to where the
-            //   .git folder ACTUALLY lives.
+            //   .git folder ACTUALLY lives. NOTE: This can be removed
+            //   when all repos are of the correct structure/pipeline.
             if (rootPath.contains("/apps/")) {
                // Extract the base portion of this path for the REAL rootPath
                gitRootPath = rootPath.substring(0, rootPath.indexOf("/apps/"))
+
+               println "-----WARNING: This repository needs to be refactored!"
             }
             else {
+               // The .git folder is right where it's supposed to be
                gitRootPath = rootPath
             }
 
@@ -43,13 +70,14 @@ class VersionUpdaterPlugin implements Plugin<Project> {
                projectPath = rootPath
                checkForGradlePropertiesInBase = true
             }
-println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
+
 
             boolean pluginFileExists = false
             boolean gradlePropertiesInBase = false
 
             println "=========================================================="
             println "=========================================================="
+            println "         GIT ROOT PATH:  ${gitRootPath}"
             println "  Jenkins Root project:  ${project.rootProject}"
             println "       Jenkins rootDir:  ${project.rootDir}"
             println "    Jenkins projectDir:  ${project.projectDir}"
@@ -63,29 +91,79 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
                   "${project.projectDir}/gradle.properties")
 
                if (gradleBaseFile.exists()) {
-                  println "INFO: gradle.properties found in base " +
-                     "root project '${rootPath}'"
                   gradlePropertiesInBase = true
                }
                else {
-                  println "INFO: No gradle.properties found in base root " +
-                     "project '${rootPath}'"
+                  println "=========================================================="
+                  println "=========================================================="
+                  println "-----INFO: No sub-project or rootDir gradle.properties " +
+                     "found for project '${rootPath}.' Exiting..."
                   project.ext.set("doVersionUpdateCommit", "false")
-                  println "=========================================================="
-                  println "=========================================================="
                   return
                }
             }
    
-            if (!gradlePropertiesInBase && !basePath.contains("app")) {
-               println "Quietly exiting '${project.projectDir}' is not a " +
-                  "versionable application project."
-               project.ext.set("doVersionUpdateCommit", "false")
-               println "=========================================================="
-               println "=========================================================="
-               return
+            File gradlePropsFile
+            File otherGradlePropsFile
+            String pluginFilePath
+
+            // Next logic check: We weren't supposed to find a gradle.properties
+            //  in the rootDir. At this point, there should be a 
+            //  gradle.properties file (at a minimum) in the projectDir.
+            if (!gradlePropertiesInBase) {
+               // The first item to to check is where or not the projectPath
+               //  has a gradle.properties file. If it does NOT have a file
+               //  at this path, then it is not a versionable project.
+               gradlePropsFile = new File("${project.projectDir}/gradle.properties")
+               if (!gradlePropsFile.exists()) {
+                  println "=========================================================="
+                  println "=========================================================="
+                  println "-----INFO: Version updater  exiting. '${project.projectDir}' is not a " +
+                     "versionable project."
+                  project.ext.set("doVersionUpdateCommit", "false")
+                  return
+               }
+
+               String tmpPath = project.projectDir
+
+               // If this project is an "apps" project AND it contains a "plugins"
+               //   versionable project as well, then we'd like to only have to do
+               //   one 'git add'
+               if (tmpPath.contains("/apps/")) {
+                  // Determine if this project has a plugins also...
+                  pluginFilePath = tmpPath.replace("/apps/", "/plugins/")
+                  tmpPath = pluginFilePath.substring(0, pluginFilePath.length() - 3)
+                  pluginFilePath = tmpPath + "plugin"
+                  otherGradlePropsFile = new File("${pluginFilePath}/gradle.properties")
+                  if (otherGradlePropsFile.exists()) {
+                     pluginFileExists = true
+                  }
+               }
+               else if (tmpPath.contains("/plugins/")) {
+                  // Determine if this plugins project has a apps 
+                  String appFilePath = tmpPath.replace("/plugins/", "/apps/")
+
+                  // Replace the ending portion (which ends in -plugin) with
+                  //   -app to check to see if this project also has an apps
+                  //   portion.
+                  tmpPath = appFilePath.substring(0, appFilePath.length() - 6)
+                  appFilePath = tmpPath + "app"
+
+                  // Now check for the existence 
+                  otherGradlePropsFile = new File("${appFilePath}/gradle.properties")
+                  if (otherGradlePropsFile.exists()) {
+                     println "=========================================================="
+                     println "=========================================================="
+                     println "-----INFO: Version updater exiting. '${project.projectDir}' will " +
+                        "be processed in combination with this project's app processing."
+                     project.ext.set("doVersionUpdateCommit", "false")
+                     return
+                  }
+               }
             }
 
+            // KLUGE #2: The project variables on some of the slave machines,
+            //   might actually contain different starting paths.
             // Retrieve the token to split paths on. This is necessary because 
             //   of the way Jenkins in the cloud has data partitions mounted.
             String splitToken = project.ext.versionPathSplitToken
@@ -111,34 +189,38 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
                          projectPath = basePath
                       }
 
-                      println "Updated basePath: ${basePath}"
-                      println "Updated rootPath: ${rootPath}"
-                      println "Updated projectPath: ${projectPath}"
+                      println "        Split basePath:  ${basePath}"
+                      println "        Split rootPath:  ${rootPath}"
+                      println "     Split projectPath:  ${projectPath}"
                       println "=========================================================="
                       println "=========================================================="
                    }
                    else {
-                      println "     ERROR: Could not split projectPath with " +
+                      println "=========================================================="
+                      println "=========================================================="
+                      println "-----ERROR: Could not split projectPath with " +
                          "${splitToken} - " + pathTokens.size()
                       project.ext.set("doVersionUpdateCommit", "false")
-                      println "=========================================================="
-                      println "=========================================================="
                       return
                    }
                 }
                 else {
-                   println "     ERROR: Could not split rootPath with " + 
+                   println "=========================================================="
+                   println "=========================================================="
+                   println "-----ERROR: Could not split rootPath with " + 
                       "${splitToken} - " + rootTokens.size()
                    project.ext.set("doVersionUpdateCommit", "false")
-                   println "=========================================================="
-                   println "=========================================================="
                    return
                 }
             }
             else {
-               println "INFO: No path split token required."
                println "=========================================================="
                println "=========================================================="
+            }
+
+            if (gradlePropertiesInBase) {
+               println "INFO: gradle.properties found in root " +
+                  "project '${rootPath}'"
             }
 
             // If this projectDir (basePath) does not contain the base git repo 
@@ -157,8 +239,8 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
             // Pull the branch we need to check from 
             //   omar-common-properties.gradle
             String BRANCH_TO_PROCESS = project.ext.versionBranchToCheck
-            println "-----Checking branch '${BRANCH_TO_PROCESS}' " +
-               "for code updates..."
+            println "Checking branch '${BRANCH_TO_PROCESS}' " +
+               "for code updates."
    
             // Default these to something
             String lastCommitFromFile = "NA"
@@ -182,22 +264,10 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
                   if (line.startsWith("buildVersion")) {
                      def tokens = line.split('=')
                      buildVersion = tokens[1]
-                     println "-----Current release version: ${buildVersion} " +
+                     println "     Current release version: ${buildVersion} " +
                         "for ${projectPath}"
                   }
                }
-
-               // Determine if this project has a plugins path also...
-               String tmpPath = project.projectDir
-               String pluginFilePath = tmpPath.replace("/apps/", "/plugins/")
-               tmpPath = pluginFilePath.substring(0, pluginFilePath.length() - 3)
-               pluginFilePath = tmpPath + "plugin"
-               File pifile = new File("${pluginFilePath}/gradle.properties")
-               if (pifile.exists()) {
-                  pluginFileExists = true
-               }
-
-//TODO
 
                // Retrieve the git branch information for this project
                def cmdBranch = 
@@ -207,7 +277,8 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
                // We are only going to continue this task if this is the branch 
                //   we are supposed to check
                if (branch != BRANCH_TO_PROCESS) {
-                  println "INFO: Not updating versions for branch '${branch}'"
+                  println "-----Cannot update version for branch '${branch}' " +
+                     "(Expected: '${BRANCH_TO_PROCESS}')"
    
                   // Set the flag to indicate a commit is not necessary
                   project.ext.set("doVersionUpdateCommit", "false")
@@ -260,7 +331,7 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
 
                if (lastCommitFromFile == "NA" || lastCommitIdx == -1) {
                   // There was no lastCommit token in the project
-                  println "INFO: No last commit token found in '${projectPath}'"
+                  println "-----INFO: No last commit token found in '${projectPath}'"
    
                   // Set the flag to indicate a commit is not necessary
                   project.ext.set("doVersionUpdateCommit", "false")
@@ -277,7 +348,7 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
                   lastCodeCommitId = tokens[lastCommitIdx][0]
                }
                else {
-                  println "INFO: No new code changes committed - Nothing to " +
+                  println "-----INFO: No new code changes committed - Nothing to " +
                      "update for '${projectPath}'"
    
                   // Set the flag to indicate a commit is not necessary
@@ -322,7 +393,7 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
                      tmp += versionTokens[i]
                   }
 
-                  println "+++++INFO: lastCommit token has changed. Version " +
+                  println "*****INFO: lastCommit token has changed. Version " +
                      "number(s) will be updated to ${tmp} for ${projectPath}"
    
                   // Concat the number with the token key
@@ -330,7 +401,7 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
    
                   // Build the string path to the apps and plugins 
                   //   gradle.properties files
-                  String appUpdatePath = projectPath + "/gradle.properties"
+                  String appUpdatePath
                   String pluginUpdatePath =  pluginFilePath + "/gradle.properties"
    
                   // This will be the base git add command. It may also get the 
@@ -339,20 +410,26 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
                   String addCommand
 
                   if (!gradlePropertiesInBase) { 
+                     appUpdatePath = projectPath + "/gradle.properties"
+
                      addCommand = "git --git-dir=${gitRootPath}/.git " +
                         "add ${appUpdatePath}"
                   }
                   else {
+                     appUpdatePath = "${project.projectDir}/gradle.properties"
+
                      addCommand = "git --git-dir=${gitRootPath}/.git " +
                         "--work-tree=${gitRootPath} " +
-                        "add gradle.properties"
+                        "add ${project.projectDir}/gradle.properties"
                   }
    
                   // Update the necessary lines in both files if they exist. If 
                   //   we make it here, the app gradle.properties exists for sure.
                   updateGradlePropertiesFile(appUpdatePath, oldVersionLine, newVersionLine, 
                      oldCommitLine, newCommitLine)
-                  // Does the plugin file exist?
+
+                  // This is ONLY relevant when there is an apps AND a plugins directory!
+                  //   Does the plugin file exist?
                   if (pluginFileExists) {
                      updateGradlePropertiesFile(pluginUpdatePath, 
                         oldVersionLine, newVersionLine, 
@@ -368,7 +445,9 @@ println "============>>>>>>>>> Using GIT ROOT PATH: ${gitRootPath}"
                      }
                   }
 
-println "ADDCOMMAND: ${addCommand}"
+                  if (useDebug) {
+                     println "GIT ADDCOMMAND: ${addCommand}"
+                  }
 
                   // The parallel build of gradle will sometimes cause these git 
                   //   lock files to exist if more than 1 build is operating 
@@ -404,7 +483,7 @@ println "ADDCOMMAND: ${addCommand}"
                   }
                }
                else {
-                  println "INFO: The lastCommit tokens are current - nothing " +
+                  println "+++++INFO: The lastCommit tokens are current - nothing " +
                      "to update for '${projectPath}'"
    
                   // Set the flag to indicate a commit is not necessary
@@ -413,7 +492,7 @@ println "ADDCOMMAND: ${addCommand}"
             }
             else {
                // This project does not contain versioning information
-               println "INFO: No gradle.properties to update for '${projectPath}'"
+               println "-----INFO: No gradle.properties to update for '${projectPath}'"
    
                // Set the flag to indicate a commit is not necessary
                project.ext.set("doVersionUpdateCommit", "false")
@@ -441,7 +520,6 @@ println "ADDCOMMAND: ${addCommand}"
 
       // Get the File handle
       def replacementFile = new File(filePathToUpdate)
-println "FILEPATHTOUPDATE: ${filePathToUpdate}"
 
       if (replacementFile.exists()) {
          // This block will rewrite the file with the new information
@@ -451,7 +529,7 @@ println "FILEPATHTOUPDATE: ${filePathToUpdate}"
          replacementFile.text = newConfig
       }
       else {
-         println "File ${filePathToUpdate} does not exist. Cannot update " +
+         println "-----ERROR: File ${filePathToUpdate} does not exist. Cannot update " +
             "version/commit information."
          retVal = false
       }
@@ -468,7 +546,7 @@ println "FILEPATHTOUPDATE: ${filePathToUpdate}"
       }
 
       if (lockTries == 10) {
-         println "WARNING: Max git unlock tries exceeded for '${filename}'"
+         println "-----WARNING: Max git unlock tries exceeded for '${filename}'"
       }
    }
 }
